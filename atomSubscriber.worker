@@ -1,0 +1,7 @@
+# define the runtime language
+runtime "node"
+
+file "package.json"
+dir "node_modules"
+# exec is the file that will be executed:
+exec "atomSubscriber.js"
