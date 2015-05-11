@@ -10,6 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "client-http": "0.0.7",
-    "event-store-client": "0.0.5"
+    "event-store-client": "0.0.5",
+    "ges-client": "^0.9.1",
+    "node-daemon": "0.0.15"
   }
 }

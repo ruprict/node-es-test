@@ -1,66 +1,99 @@
-/**
- * Tips
- * ====
- * - Set `user-agent` and `accept` headers when sending requests. Some services will not respond as expected without them.
- * - Set `pool` to false if you send lots of requests using "request" library.
- */
+var EventStoreClient = require("event-store-client");
 
-var http = require('client-http');
+// Sample application to demonstrate how to use the Event Store Client
+/*************************************************************************************************/
+// CONFIGURATION
+var config = {
+    'eventStore': {
+    	'address': "ec2-54-82-102-100.compute-1.amazonaws.com",
+        'port': 1113,
+        'stream': 'orders',
+        'credentials': {
+			'username': "admin",
+			'password': "changeit"
+        }
+    },
+    'debug': false
+};
+/*************************************************************************************************/
 
-function fetch(feed) {
-  // Some feeds do not respond without user-agent and accept headers.
-  http.request(feed, function(data, err, cookie, headers){
-    if (err) {
-      console.log(err);
-      return;
+// Connect to the Event Store
+var options = {
+	host: config.eventStore.address,
+	port: config.eventStore.port,
+    debug: config.debug
+};
+console.log('Connecting to ' + options.host + ':' + options.port + '...');
+var connection = new EventStoreClient.Connection(options);
+console.log('Connected');
+
+// Ping it to see that its there
+connection.sendPing(function(pkg) {
+    console.log('Received ' + EventStoreClient.Commands.getCommandName(pkg.command) + ' response!');
+});
+
+// Subscribe to receive statistics events
+var streamId = config.eventStore.stream;
+var credentials = config.eventStore.credentials;
+
+var destinationId = "orders";
+console.log('Writing events to ' + destinationId + '...');
+var newEvent = {
+    eventId: EventStoreClient.Connection.createGuid(),
+    eventType: 'OrderCreated',
+    data: {
+        textProperty: "value",
+        numericProperty: 42
     }
-    
-    json = JSON.parse(data);
-    json["entries"].forEach(function(entry) {
-      console.log(entry.data); 
+};
+var newEvents = [ newEvent ];
+function writeEvents() {
+  connection.writeEvents(destinationId, EventStoreClient.ExpectedVersion.Any, false, newEvents, credentials, function(completed) {
+      console.log('Events written result: ' + EventStoreClient.OperationResult.getName(completed.result));
+  });
+}
+
+console.log('Subscribing to ' + streamId + "...");
+var correlationId = connection.subscribeToStream(streamId, true, function(streamEvent) {
+    onEventAppeared(streamEvent);
+}, onSubscriptionConfirmed, onSubscriptionDropped, credentials);
+
+console.log("Correlation id: " +correlationId.toString());
+
+function onEventAppeared(streamEvent) {
+    if (streamEvent.streamId != streamId) {
+        console.log("Unknown event from " + streamEvent.streamId);
+        return;
+    }
+    console.log(streamEvent.data);
+}
+
+function unsub(){
+    connection.unsubscribeFromStream(correlationId, credentials, function() {
+        console.log("Unsubscribed");
     });
-
-  }, null, {"Accept": "application/vnd.eventstore.atom+json", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36"});
 }
 
-function maybeTranslate (res, charset) {
-  var iconv;
-  // Use iconv if its not utf8 already.
-  if (!iconv && charset && !/utf-*8/i.test(charset)) {
-    try {
-      iconv = new Iconv(charset, 'utf-8');
-      console.log('Converting from charset %s to utf-8', charset);
-      iconv.on('error', done);
-      // If we're using iconv, stream will be the output of iconv
-      // otherwise it will remain the output of request
-      res = res.pipe(iconv);
-    } catch(err) {
-      res.emit('error', err);
+function closeConnection() {
+        console.log("All done!");
+        connection.close();
+}
+
+function onSubscriptionConfirmed(confirmation) {
+    console.log("Subscription confirmed (last commit " + confirmation.lastCommitPosition + ", last event " + confirmation.lastEventNumber + ")");
+}
+
+function onSubscriptionDropped(dropped) {
+    var reason = dropped.reason;
+    switch (dropped.reason) {
+        case 0:
+            reason = "unsubscribed";
+            break;
+        case 1:
+            reason = "access denied";
+            break;
     }
-  }
-  return res;
+    console.log("Subscription dropped (" + reason + ")");
 }
 
-function getParams(str) {
-  var params = str.split(';').reduce(function (params, param) {
-    var parts = param.split('=').map(function (part) { return part.trim(); });
-    if (parts.length === 2) {
-      params[parts[0]] = parts[1];
-    }
-    return params;
-  }, {});
-  return params;
-}
 
-function done(err) {
-  if (err) {
-    console.log(err, err.stack);
-    return process.exit(1);
-  }
-  //server.close();
-  process.exit();
-}
-
-// Don't worry about this. It's just a localhost file server so you can be
-// certain the "remote" feed is available when you run this example.
-fetch('http://ec2-54-82-102-100.compute-1.amazonaws.com:2113/streams/orders?embed=body');
