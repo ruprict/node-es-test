@@ -54,6 +54,7 @@ function writeEvents() {
 }
 
 console.log('Subscribing to ' + streamId + "...");
+var lastEvent = 26;
 var correlationId = connection.subscribeToStream(streamId, true, function(streamEvent) {
     onEventAppeared(streamEvent);
 }, onSubscriptionConfirmed, onSubscriptionDropped, credentials);
@@ -61,10 +62,15 @@ var correlationId = connection.subscribeToStream(streamId, true, function(stream
 console.log("Correlation id: " +correlationId.toString());
 
 function onEventAppeared(streamEvent) {
+  if (streamEvent.eventNumber < lastEvent) {
+    console.log("We've seen this one");
+    return
+  }
     if (streamEvent.streamId != streamId) {
         console.log("Unknown event from " + streamEvent.streamId);
         return;
     }
+    console.log(streamEvent);
     console.log(streamEvent.data);
 }
 
@@ -96,4 +102,9 @@ function onSubscriptionDropped(dropped) {
     console.log("Subscription dropped (" + reason + ")");
 }
 
+process.on('SIGINT', function() {
+    console.log("Caught interrupt signal");
+    closeConnection();
+    process.exit();
+});
 
