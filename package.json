@@ -12,6 +12,7 @@
     "client-http": "0.0.7",
     "event-store-client": "0.0.5",
     "ges-client": "^0.9.1",
-    "node-daemon": "0.0.15"
+    "node-daemon": "0.0.15",
+    "node-uuid": "^1.4.3"
   }
 }

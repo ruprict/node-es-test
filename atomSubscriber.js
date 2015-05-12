@@ -1,99 +1,63 @@
-var EventStoreClient = require("event-store-client");
+var ges = require('ges-client')
+  , uuid = require('node-uuid');
+
 
 // Sample application to demonstrate how to use the Event Store Client
 /*************************************************************************************************/
 // CONFIGURATION
 var config = {
-    'eventStore': {
-    	'address': "ec2-54-82-102-100.compute-1.amazonaws.com",
-        'port': 1113,
-        'stream': 'orders',
-        'credentials': {
-			'username': "admin",
-			'password': "changeit"
-        }
-    },
-    'debug': false
+  'eventStore': {
+    'address': "ec2-54-82-102-100.compute-1.amazonaws.com",
+    'port': 1113,
+    'stream': 'orders',
+    'credentials': {
+      'username': "admin",
+      'password': "changeit"
+    }
+  },
+  'debug': false
 };
 /*************************************************************************************************/
 
 // Connect to the Event Store
 var options = {
-	host: config.eventStore.address,
-	port: config.eventStore.port,
-    debug: config.debug
+  host: config.eventStore.address,
+  port: config.eventStore.port,
+  debug: config.debug
 };
 console.log('Connecting to ' + options.host + ':' + options.port + '...');
-var connection = new EventStoreClient.Connection(options);
-console.log('Connected');
 
-// Ping it to see that its there
-connection.sendPing(function(pkg) {
-    console.log('Received ' + EventStoreClient.Commands.getCommandName(pkg.command) + ' response!');
-});
+// 1) Create a connection to a running EventStore
+// //    using default connection options and credentials
+var connection = ges(options), 
+                stream = 'orders';
 
-// Subscribe to receive statistics events
-var streamId = config.eventStore.stream;
-var credentials = config.eventStore.credentials;
+     // 2) Create a subscription
+connection.on('connect', function(message) {
+  var subscription = connection.subscribeToStream(stream);
+  console.log(message);
 
-var destinationId = "orders";
-console.log('Writing events to ' + destinationId + '...');
-var newEvent = {
-    eventId: EventStoreClient.Connection.createGuid(),
-    eventType: 'OrderCreated',
-    data: {
-        textProperty: "value",
-        numericProperty: 42
-    }
-};
-var newEvents = [ newEvent ];
-function writeEvents() {
-  connection.writeEvents(destinationId, EventStoreClient.ExpectedVersion.Any, false, newEvents, credentials, function(completed) {
-      console.log('Events written result: ' + EventStoreClient.OperationResult.getName(completed.result));
-  });
-}
+  // 3}) Listen for events
+  subscription.on('event', function(evt) {
+    console.log(5);
+    // ta da!
+    console.log(evt)
+  })
 
-console.log('Subscribing to ' + streamId + "...");
-var correlationId = connection.subscribeToStream(streamId, true, function(streamEvent) {
-    onEventAppeared(streamEvent);
-}, onSubscriptionConfirmed, onSubscriptionDropped, credentials);
-
-console.log("Correlation id: " +correlationId.toString());
-
-function onEventAppeared(streamEvent) {
-    if (streamEvent.streamId != streamId) {
-        console.log("Unknown event from " + streamEvent.streamId);
-        return;
-    }
-    console.log(streamEvent.data);
-}
-
-function unsub(){
-    connection.unsubscribeFromStream(correlationId, credentials, function() {
-        console.log("Unsubscribed");
+  var newEvent = ges.createEventData(uuid.v4(), "OrderCreated", true,  {
+      field: 'OrderNumber',
+      value: '42'
     });
-}
-
-function closeConnection() {
-        console.log("All done!");
-        connection.close();
-}
-
-function onSubscriptionConfirmed(confirmation) {
-    console.log("Subscription confirmed (last commit " + confirmation.lastCommitPosition + ", last event " + confirmation.lastEventNumber + ")");
-}
-
-function onSubscriptionDropped(dropped) {
-    var reason = dropped.reason;
-    switch (dropped.reason) {
-        case 0:
-            reason = "unsubscribed";
-            break;
-        case 1:
-            reason = "access denied";
-            break;
-    }
-    console.log("Subscription dropped (" + reason + ")");
-}
-
-
+  console.log(1);
+  var appendData = {
+    expectedVersion: ges.expectedVersion.any,
+    events: [newEvent]
+  };
+  console.log(2);
+  connection.appendToStream(stream, appendData, function(err, appendResult) {
+    if(err) return console.log('Ooops!', err); // connection error
+    console.log('Append');
+    console.log(appendResult);
+  })
+  console.log(3);
+});
